@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "utility": "cpp",
+        "xiosbase": "cpp",
+        "ios": "cpp"
+    }
+}
