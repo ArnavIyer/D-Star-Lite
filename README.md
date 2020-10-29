@@ -8,4 +8,6 @@ The initial graph is shown here:
 ![initial](https://user-images.githubusercontent.com/40965890/97532869-40984d80-1985-11eb-9058-23707a3cff8b.png)
 The "actual" graph is shown here:
 ![actual](https://user-images.githubusercontent.com/40965890/97533144-b2709700-1985-11eb-8f89-bc7d92f7a957.png)
-Because the robot can only see changes in edge weights in successors of the current "start" node, the route the robot takes is re-planned twice: once when it reaches node #1 and once when it reaches node #3 
+Because the robot can only see changes in edge weights in successors of the current "start" node, the route the robot takes is re-planned twice: once when it reaches node #1 and once when it reaches node #3.
+
+The test case is taken from [this video](https://ocw.mit.edu/courses/aeronautics-and-astronautics/16-412j-cognitive-robotics-spring-2016/videos-for-advanced-lectures/advanced-lecture-1/).
