@@ -1,18 +1,7 @@
-/*
-Challenges:
-constant time priority queue update/deletion
-	done with a map that keeps track of what is in the priority queue
-
-*/
-
 #include <iostream>
 #include <vector>
 #include <queue>
-#include <unordered_set>
 #include <unordered_map>
-#include <memory>
-#include <cmath>
-#include <climits>
 
 using namespace std;
 
