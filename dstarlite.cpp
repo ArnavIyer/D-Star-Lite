@@ -1,3 +1,10 @@
+/*
+Challenges:
+constant time priority queue update/deletion
+	done with a map that keeps track of what is in the priority queue
+
+*/
+
 #include <iostream>
 #include <vector>
 #include <queue>
@@ -74,17 +81,30 @@ struct Node {
 		this->succ = succ;
 		this->pred = pred;
 	}
+
+	const void toString() const {
+		cout << "id:" << id << " g:" << g << " rhs:" << rhs << " pred:";
+		for (auto i : pred) {
+			cout << i << ",";
+		}
+		cout << " succ:";
+		for (auto i : succ) {
+			cout << i << ",";
+		}
+		cout << endl;
+	}
 };
 
 class KeySorter {
     public:
         bool operator() (PQEntry left, PQEntry right) {
-            return ((left.key.first == right.key.first) ? right.key.second > left.key.second : right.key.first < left.key.first);
+            return ((left.key.first == right.key.first) ? right.key.second < left.key.second : right.key.first < left.key.first);
         }
 };
 
 class Graph {
-    vector<vector<int>> initialAdjMatrix;
+	public:
+    vector<vector<int>> currAdjMatrix;
 	vector<vector<int>> actualAdjMatrix;
 	unordered_map<int, pair<vector<int>, vector<int>>> adjLists; // maps the id of a node to a predecessor (.first) and successor (.second) list
     priority_queue<PQEntry, vector<PQEntry>, KeySorter> pq;
@@ -96,19 +116,20 @@ class Graph {
     int lastStartId;
     int km;
 
-    Graph(vector<vector<int>> iam, vector<vector<int>> aam, unordered_map<int, pair<vector<int>, vector<int>>> al, vector<vector<int>> h, int startID, int goalID) {
-        initialAdjMatrix = iam; // stores cost to travel to each node, -1 if impossible
+    Graph(vector<vector<int>> cam, vector<vector<int>> aam, unordered_map<int, pair<vector<int>, vector<int>>> al, vector<vector<int>> h, int startID, int goalID) {
+        currAdjMatrix = cam; // stores cost to travel to each node, -1 if impossible
 		actualAdjMatrix = aam;
 		adjLists = al;
         heuristic = h;
-		startId =startID; //Node(startId, INT_MAX, INT_MAX, adjLists[startId].first, adjLists[startId].second);
-		goalId =goalID;// Node(goalId, INT_MAX, 0, adjLists[startId].first, adjLists[startId].second);
+		startId = startID; 
+		goalId = goalID;
 		nodeMap[startId] = Node(startId, INT_MAX, INT_MAX, adjLists[startId].first, adjLists[startId].second);
 		nodeMap[goalId] = Node(goalId, INT_MAX, 0, adjLists[goalId].first, adjLists[goalId].second);
 
 		// procedure Initialize()
 		km = 0;
 		pq.push(PQEntry(Key(heuristic[startId][goalId],0), goalId));
+		pqMap[goalId] = PQEntry(Key(heuristic[startId][goalId],0), goalId);
     }
 
 	Key calculateKey(Node s) {
@@ -118,99 +139,105 @@ class Graph {
 
 	// make sure node is already initialized when using this function
 	void updateVertex(int nodeId) {
+		if (nodeId != goalId) {
+			nodeMap[nodeId].rhs = calculateRHS(nodeId);
+		}
 		if (nodeMap[nodeId].g != nodeMap[nodeId].rhs) {
-			pqMap[nodeId] = PQEntry(calculateKey(nodeMap[nodeId]),nodeId);
+			pqMap[nodeId] = PQEntry(calculateKey(nodeMap[nodeId]), nodeId);
 			pq.push(pqMap[nodeId]);
-		} else if (nodeMap.count(nodeId) == 1 && nodeMap[nodeId].g != nodeMap[nodeId].rhs) {
-			pqMap.erase(nodeId);
-		}33
+		}
 	}
 	
 	void computeShortestPath() {
-		while(pq.top().key < calculateKey(nodeMap[startId]) || nodeMap[startId].rhs > nodeMap[startId].g)  {
+		while(pq.top().key < calculateKey(nodeMap[startId]) || nodeMap[startId].rhs != nodeMap[startId].g)  {
 			// continue if the top of the priority queue is either not in pqMap or not equal to what is in pqMap
+			while (pqMap.count(pq.top().id) == 0 || pq.top() != pqMap[pq.top().id]) {
+				pq.pop();
+			}
 			PQEntry pqTop = pq.top();
-			if (pqMap.count(pqTop.id) == 0 || pqMap[pqTop.id] != pqTop)
-				continue;
-			
-			Key kNew = calculateKey(nodeMap[pqTop.id]);
-			if (pqTop.key < kNew) {
-				pqMap[pqTop.id] = PQEntry(kNew,pqTop.id);
+			pq.pop();
+			Key newKey = calculateKey(nodeMap[pqTop.id]);
+			if (pqTop.key < newKey) {
+				pqMap[pqTop.id] = PQEntry(newKey, pqTop.id);
 				pq.push(pqMap[pqTop.id]);
-			} 
+			}
 			else if (nodeMap[pqTop.id].g > nodeMap[pqTop.id].rhs) {
 				nodeMap[pqTop.id].g = nodeMap[pqTop.id].rhs;
-				pqMap.erase(pqTop.id);
-				pq.pop();
 				for (auto predId : nodeMap[pqTop.id].pred) {
 					if (nodeMap.count(predId) == 0) {
 						nodeMap[predId] = Node(predId, INT_MAX, INT_MAX, adjLists[predId].first, adjLists[predId].second);
-					}
-					if (predId != goalId) {
-						nodeMap[predId].rhs = min(nodeMap[predId].rhs, safeAdd(initialAdjMatrix[predId][pqTop.id], nodeMap[pqTop.id].g));
 					}
 					updateVertex(predId);
 				}
 			}
 			else {
-				int gOld = nodeMap[pqTop.id].g;
 				nodeMap[pqTop.id].g = INT_MAX;
 				for (auto predId : nodeMap[pqTop.id].pred) {
 					if (nodeMap.count(predId) == 0) {
 						nodeMap[predId] = Node(predId, INT_MAX, INT_MAX, adjLists[predId].first, adjLists[predId].second);
 					}
-					if (nodeMap[predId].rhs == initialAdjMatrix[predId][pqTop.id] + gOld) {
-						if (predId != goalId) {
-							nodeMap[predId].rhs = calculateRHS(predId);
-						}
-					}
 					updateVertex(predId);
 				}
-				// also have to do it for pqTop.id
-				if (nodeMap[pqTop.id].rhs == gOld) {
-					if (pqTop.id != goalId) {
-						nodeMap[pqTop.id].rhs = calculateRHS(pqTop.id);
-					}
-				}
 				updateVertex(pqTop.id);
+			}
+			while (pqMap.count(pq.top().id) == 0 || pq.top() != pqMap[pq.top().id]) {
+				pq.pop();
 			}
 		}
 	}
 
 	void main() {
+		cout << "Starting algorithm" << endl;
 		lastStartId = startId;
 		computeShortestPath();
 		while (startId != goalId) {
-			if (nodeMap[startId].rhs == INT_MAX) {
+			if (nodeMap[startId].g == INT_MAX) {
 				cout << "No path possible" << endl;
-				return;
 			}
 			int minDist = INT_MAX;
+			int newStartId = startId;
 			for (auto succId : nodeMap[startId].succ) {
 				if (nodeMap.count(succId) == 0) {
 					nodeMap[succId] = Node(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
 				}
-				int dist = safeAdd(initialAdjMatrix[startId][succId], nodeMap[succId].g);
+				int dist = safeAdd(currAdjMatrix[startId][succId], nodeMap[succId].g);
 				if (minDist > dist) {
 					minDist = dist;
-					startId = succId;
+					newStartId = succId;
 				}
 			}
-			vector<pair<int,int>> changedEdges;
-			
-		// scan graph for changed edges, add to changed edges list
-		// if changed edges list is not empty,
+			cout << "Moving from: " << startId << " to " << newStartId << endl;
+			startId = newStartId;
+			vector<pair<int,int>> changedEdges;				// assuming robot can only see successors of itself
+			for (auto succId : nodeMap[startId].succ) {		
+				if (currAdjMatrix[startId][succId] != actualAdjMatrix[startId][succId]) {
+					if (nodeMap.count(succId) == 0) {
+						nodeMap[succId] = Node(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
+					}
+					changedEdges.push_back(make_pair(startId,succId));
+				}
+			}
+			if (changedEdges.size() != 0) {
+				// cout << "hello" << endl;
+				km += heuristic[lastStartId][startId];
+				lastStartId = startId;
+				for (auto edge : changedEdges) {
+					currAdjMatrix[edge.first][edge.second] = actualAdjMatrix[edge.first][edge.second];
+					updateVertex(edge.first);
+				}
+				computeShortestPath();
+			}
 		}
 	}
 
-	// can only use if nodeId has been initialized (if it is present in the map)
+	// can only use if nodeId has been initialized (if it is in nodeMap)
 	int calculateRHS(int nodeId) {
-		int minRhs = 0;
+		int minRhs = INT_MAX;
 		for (auto succId : nodeMap[nodeId].succ) {
 			if (nodeMap.count(succId) == 0) {
 				nodeMap[succId] = Node(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
 			}
-			minRhs = min(minRhs, safeAdd(initialAdjMatrix[nodeId][succId], nodeMap[succId].g));
+			minRhs = min(minRhs, safeAdd(currAdjMatrix[nodeId][succId], nodeMap[succId].g));
 		}
 		return minRhs;
 	}
@@ -221,8 +248,40 @@ class Graph {
 		}
 		return a + b;
 	}
-    
-    // instead of updating the key of a node in a priority queue, you have to
-    // check everytime you are popping something if you are popping the right version of the node
-
 };
+
+int main() {
+	// sample test case
+	vector<vector<int>> adjMatrix = {{0,1,-1,-1,-1},
+									 {1,0,1,1,-1},
+									 {-1,1,0,1,1},
+									 {-1,1,1,0,10},
+									 {-1,-1,1,10,0}};
+	vector<vector<int>> changedAdjMatrix = {{0,1,-1,-1,-1},
+											{1,0,INT_MAX,1,-1},
+											{-1,INT_MAX,0,INT_MAX,INT_MAX},
+									 		{-1,1,INT_MAX,0,10},
+									 		{-1,-1,INT_MAX,10,0}};
+	vector<vector<int>> heuris = 	{{0,1,2,2,3},
+									 {1,0,1,1,2},
+									 {2,1,0,1,1},
+									 {2,1,1,0,1},
+									 {3,2,1,1,0}};
+	unordered_map<int, pair<vector<int>, vector<int>>> adjlists;
+	for (int i = 0; i < 5; i ++) {
+		vector<int> pred;
+		vector<int> succ;
+		for (int j = 0; j < 5; j++) {
+			if (adjMatrix[i][j] >= 1) {
+				pred.push_back(j);
+				succ.push_back(j);
+			} 
+		}
+		adjlists[i] = make_pair(pred, succ);
+	}
+	int stid = 0;
+	int goalid = 4;
+
+	Graph graph(adjMatrix, changedAdjMatrix, adjlists, heuris, stid, goalid);
+	graph.main();
+}
