@@ -36,12 +36,11 @@ class GridToGraph {
 
             vector<int> temp;
             adjLists[0] = make_pair(temp, temp);
-
             for (int i = 0; i < grid.size(); i++) {
                 for (int j = 0; j < grid[0].size(); j++) {
                     int thisId = id(i,j);
                     for (int k = 0; k < 4; k++) {
-                        if (i >= 0 && i < grid.size() && j >= 0 && j < grid.size()) {
+                        if (i+dx[k] >= 0 && i+dx[k] < grid.size() && j+dy[k] >= 0 && j+dy[k] < grid.size()) {
                             int otherId = id(i+dx[k], j+dy[k]);
                             if (grid[i+dx[k]][j+dy[k]]) {
                                 adjMatrix[thisId][otherId] = 1;
@@ -71,7 +70,7 @@ class GridToGraph {
                 for (int j = 0; j < grid[0].size(); j++) {
                     int thisId = id(i,j);
                     for (int k = 0; k < 4; k++) {
-                        if (i >= 0 && i < grid.size() && j >= 0 && j < grid.size()) {
+                        if (i+dx[k] >= 0 && i+dx[k] < grid.size() && j+dy[k] >= 0 && j+dy[k] < grid.size()) {
                             int otherId = id(i+dx[k], j+dy[k]);
                             if (actualGrid[i+dx[k]][j+dy[k]]) {
                                 actualAdjMatrix[thisId][otherId] = 1;

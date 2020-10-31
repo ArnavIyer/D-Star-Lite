@@ -57,16 +57,16 @@ struct PQEntry {
 	}
 };
 
-struct Node {
+struct GraphNode {
 	int id;
 	int g;
 	int rhs;
 	vector<int> pred; 
 	vector<int> succ; 
 
-	Node() {}
+	GraphNode() {}
 
-	Node(int id, int g, int rhs, vector<int> pred, vector<int> succ) {
+	GraphNode(int id, int g, int rhs, vector<int> pred, vector<int> succ) {
 		this->g = g;
 		this->rhs = rhs;
 		this->id = id;

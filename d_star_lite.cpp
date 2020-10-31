@@ -1,9 +1,11 @@
 #include <cmath>
+#include <opencv2/highgui.hpp>
+#include <opencv2/core.hpp>
 #include "graph_structs.cpp"
 #include "grid_to_graph.cpp"
 
 using namespace std;
-// using namespace cv;
+using namespace cv;
 
 class Graph {
 	public:
@@ -13,14 +15,14 @@ class Graph {
 		unordered_map<int, pair<vector<int>, vector<int>>> adjLists; // maps the id of a node to a predecessor (.first) and successor (.second) list
 		priority_queue<PQEntry, vector<PQEntry>, KeySorter> pq;
 		unordered_map<int, PQEntry> pqMap;	// maps id to a 
-		unordered_map<int, Node> nodeMap;
+		unordered_map<int, GraphNode> nodeMap;
 		vector<vector<int>> heuristic;
 		int startId;
 		int goalId;
 		int lastStartId;
 		int km;
 
-		// Mat img;
+		Mat img;
 		bool useVisualizer;
 
 		Graph() {}
@@ -32,10 +34,10 @@ class Graph {
 			heuristic = h;
 			startId = startID; 
 			goalId = goalID;
-			nodeMap[startId] = Node(startId, INT_MAX, INT_MAX, adjLists[startId].first, adjLists[startId].second);
-			nodeMap[goalId] = Node(goalId, INT_MAX, 0, adjLists[goalId].first, adjLists[goalId].second);
-			// if (numRows > 0)
-			// 	img = Mat::zeros(PIXELS_PER_SQUARE*numRows, PIXELS_PER_SQUARE*currAdjMatrix.size()/numRows, CV_8UC3);
+			nodeMap[startId] = GraphNode(startId, INT_MAX, INT_MAX, adjLists[startId].first, adjLists[startId].second);
+			nodeMap[goalId] = GraphNode(goalId, INT_MAX, 0, adjLists[goalId].first, adjLists[goalId].second);
+			if (numRows > 0)
+				img = Mat::zeros(PIXELS_PER_SQUARE*numRows, PIXELS_PER_SQUARE*currAdjMatrix.size()/numRows, CV_8UC3);
 			useVisualizer = uv;
 
 			// procedure Initialize()
@@ -44,7 +46,7 @@ class Graph {
 			pqMap[goalId] = PQEntry(Key(heuristic[startId][goalId],0), goalId);
 		}
 
-		Key calculateKey(Node s) {
+		Key calculateKey(GraphNode s) {
 			Key key(min(s.g, s.rhs) + heuristic[startId][s.id] + km, min(s.g, s.rhs));
 			return key;
 		}
@@ -77,7 +79,7 @@ class Graph {
 					nodeMap[pqTop.id].g = nodeMap[pqTop.id].rhs;
 					for (auto predId : nodeMap[pqTop.id].pred) {
 						if (nodeMap.count(predId) == 0) {
-							nodeMap[predId] = Node(predId, INT_MAX, INT_MAX, adjLists[predId].first, adjLists[predId].second);
+							nodeMap[predId] = GraphNode(predId, INT_MAX, INT_MAX, adjLists[predId].first, adjLists[predId].second);
 						}
 						updateVertex(predId);
 					}
@@ -86,7 +88,7 @@ class Graph {
 					nodeMap[pqTop.id].g = INT_MAX;
 					for (auto predId : nodeMap[pqTop.id].pred) {
 						if (nodeMap.count(predId) == 0) {
-							nodeMap[predId] = Node(predId, INT_MAX, INT_MAX, adjLists[predId].first, adjLists[predId].second);
+							nodeMap[predId] = GraphNode(predId, INT_MAX, INT_MAX, adjLists[predId].first, adjLists[predId].second);
 						}
 						updateVertex(predId);
 					}
@@ -102,12 +104,12 @@ class Graph {
 			cout << "Starting algorithm" << endl;
 			lastStartId = startId;
 			computeShortestPath();
-			// if (useVisualizer) {
-			// 	updateVisualizer();
-			// 	namedWindow("Visualizer", 1);
-			// 	imshow("Visualizer", img);
-			// 	waitKey(1000);
-			// }
+			if (useVisualizer) {
+				drawGraph();
+				namedWindow("Visualizer", 1);
+				imshow("Visualizer", img);
+				waitKey(1000);
+			}
 			while (startId != goalId) {
 				if (nodeMap[startId].g == INT_MAX) {
 					cout << "No path possible" << endl;
@@ -116,7 +118,7 @@ class Graph {
 				int newStartId = startId;
 				for (auto succId : nodeMap[startId].succ) {
 					if (nodeMap.count(succId) == 0) {
-						nodeMap[succId] = Node(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
+						nodeMap[succId] = GraphNode(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
 					}
 					int dist = safeAdd(currAdjMatrix[startId][succId], nodeMap[succId].g);
 					if (minDist > dist) {
@@ -130,7 +132,7 @@ class Graph {
 				for (auto succId : nodeMap[startId].succ) {		
 					if (currAdjMatrix[startId][succId] != actualAdjMatrix[startId][succId]) {
 						if (nodeMap.count(succId) == 0) {
-							nodeMap[succId] = Node(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
+							nodeMap[succId] = GraphNode(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
 						}
 						changedEdges.push_back(make_pair(startId,succId));
 					}
@@ -144,14 +146,14 @@ class Graph {
 					}
 					computeShortestPath();
 				}
-				// if (useVisualizer) {
-				// 	updateVisualizer();
-				// 	namedWindow("Visualizer", 1);
-				// 	imshow("Visualizer", img);
-				// 	waitKey(1000);
-				// }
+				if (useVisualizer) {
+					drawGraph();
+					namedWindow("Visualizer", 1);
+					imshow("Visualizer", img);
+					waitKey(1000);
+				}
 			}
-			// waitkey(0);
+			waitKey(0);
 		}
 
 		// can only use if nodeId has been initialized (if it is in nodeMap)
@@ -159,7 +161,7 @@ class Graph {
 			int minRhs = INT_MAX;
 			for (auto succId : nodeMap[nodeId].succ) {
 				if (nodeMap.count(succId) == 0) {
-					nodeMap[succId] = Node(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
+					nodeMap[succId] = GraphNode(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
 				}
 				minRhs = min(minRhs, safeAdd(currAdjMatrix[nodeId][succId], nodeMap[succId].g));
 			}
@@ -173,7 +175,7 @@ class Graph {
 			return a + b;
 		}
 
-		void updateVisualizer() {
+		void drawGraph() {
 			// draw robot and its fov
 			// draw gridlines (optional)
 			// make startId red and goalId green
@@ -221,20 +223,20 @@ int main() {
 	graph.main();
 
 	// sample test case with visualizer
-	// vector<vector<bool>> grid = {{1,1,1,1,1},
-	// 						 	{1,1,1,1,1},
-	// 							{1,1,1,1,1},
-	// 						 	{1,1,1,1,1},
-	// 							{1,1,1,1,1}};
+	vector<vector<bool>> grid = {{1,1,1,1,1},
+							 	{1,1,1,1,1},
+								{1,1,1,1,1},
+							 	{1,1,1,1,1},
+								{1,1,1,1,1}};
 
-	// vector<vector<bool>> actualGrid = {{1,1,1,1,1},
-	// 									{1,1,0,1,1},
-	// 									{1,1,0,1,1},
-	// 									{1,1,0,1,1},
-	// 									{1,1,1,1,1}};
+	vector<vector<bool>> actualGrid = {{1,1,1,1,1},
+										{1,1,0,1,1},
+										{1,1,0,1,1},
+										{1,1,0,1,1},
+										{1,1,1,1,1}};
 
-	// GridToGraph gridToGraph(grid, actualGrid);
-	// auto data = gridToGraph.getData();
-	// Graph graphVisualizer(get<0>(data),get<1>(data),get<2>(data),get<3>(data), 0, gridToGraph.id(4,4), true, grid.size());
-	// graphVisualizer.main();
+	GridToGraph gridToGraph(grid, actualGrid);
+	auto data = gridToGraph.getData();
+	Graph graphVisualizer(get<0>(data),get<1>(data),get<2>(data),get<3>(data), 0, gridToGraph.id(4,4), true, grid.size());
+	graphVisualizer.main();
 }
