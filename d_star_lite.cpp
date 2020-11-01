@@ -1,5 +1,5 @@
-#include <cmath>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 #include <opencv2/core.hpp>
 #include "graph_structs.cpp"
 #include "grid_to_graph.cpp"
@@ -9,7 +9,13 @@ using namespace cv;
 
 class Graph {
 	public:
-		const int PIXELS_PER_SQUARE = 5;
+		const Scalar RED = Scalar(0, 0, 255);
+		const Scalar GREEN = Scalar(0, 255, 0);
+		const Scalar GRAY = Scalar(128, 128, 128);
+		const Scalar BLACK = Scalar(0, 0, 0);
+		const Scalar WHITE = Scalar(255, 255, 255);
+		const int PIXELS_PER_SQUARE = 50;
+
 		vector<vector<int>> currAdjMatrix;
 		vector<vector<int>> actualAdjMatrix;
 		unordered_map<int, pair<vector<int>, vector<int>>> adjLists; // maps the id of a node to a predecessor (.first) and successor (.second) list
@@ -24,10 +30,11 @@ class Graph {
 
 		Mat img;
 		bool useVisualizer;
+		int numCols;
 
 		Graph() {}
 
-		Graph(vector<vector<int>> cam, vector<vector<int>> aam, unordered_map<int, pair<vector<int>, vector<int>>> al, vector<vector<int>> h, int startID, int goalID, bool uv, int numRows = 0) {
+		Graph(vector<vector<int>> cam, vector<vector<int>> aam, unordered_map<int, pair<vector<int>, vector<int>>> al, vector<vector<int>> h, int startID, int goalID, bool uv, int nc = 0) {
 			currAdjMatrix = cam; // stores cost to travel to each node, -1 if impossible
 			actualAdjMatrix = aam;
 			adjLists = al;
@@ -36,8 +43,10 @@ class Graph {
 			goalId = goalID;
 			nodeMap[startId] = GraphNode(startId, INT_MAX, INT_MAX, adjLists[startId].first, adjLists[startId].second);
 			nodeMap[goalId] = GraphNode(goalId, INT_MAX, 0, adjLists[goalId].first, adjLists[goalId].second);
-			if (numRows > 0)
-				img = Mat::zeros(PIXELS_PER_SQUARE*numRows, PIXELS_PER_SQUARE*currAdjMatrix.size()/numRows, CV_8UC3);
+			numCols = nc;
+			if (numCols > 0) {
+				img = Mat::zeros(PIXELS_PER_SQUARE*currAdjMatrix.size()/numCols, PIXELS_PER_SQUARE*numCols, CV_8UC3);
+			}
 			useVisualizer = uv;
 
 			// procedure Initialize()
@@ -54,7 +63,7 @@ class Graph {
 		// make sure node is already initialized when using this function
 		void updateVertex(int nodeId) {
 			if (nodeId != goalId) {
-				nodeMap[nodeId].rhs = calculateRHS(nodeId);
+				nodeMap[nodeId].rhs = calculateRHS(nodeId); 
 			}
 			if (nodeMap[nodeId].g != nodeMap[nodeId].rhs) {
 				pqMap[nodeId] = PQEntry(calculateKey(nodeMap[nodeId]), nodeId);
@@ -70,6 +79,7 @@ class Graph {
 				}
 				PQEntry pqTop = pq.top();
 				pq.pop();
+				pqMap.erase(pqTop.id);
 				Key newKey = calculateKey(nodeMap[pqTop.id]);
 				if (pqTop.key < newKey) {
 					pqMap[pqTop.id] = PQEntry(newKey, pqTop.id);
@@ -129,7 +139,7 @@ class Graph {
 				cout << "Moving from: " << startId << " to " << newStartId << endl;
 				startId = newStartId;
 				vector<pair<int,int>> changedEdges;				// assuming robot can only see successors of itself
-				for (auto succId : nodeMap[startId].succ) {		
+				for (auto succId : nodeMap[startId].succ) {
 					if (currAdjMatrix[startId][succId] != actualAdjMatrix[startId][succId]) {
 						if (nodeMap.count(succId) == 0) {
 							nodeMap[succId] = GraphNode(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
@@ -175,54 +185,95 @@ class Graph {
 			return a + b;
 		}
 
+		Rect getRectFromId(int nodeId) {
+			return Rect(nodeId % numCols * PIXELS_PER_SQUARE, nodeId / numCols * PIXELS_PER_SQUARE, PIXELS_PER_SQUARE, PIXELS_PER_SQUARE);
+		}
+
 		void drawGraph() {
-			// draw robot and its fov
-			// draw gridlines (optional)
-			// make startId red and goalId green
+			// reset img
+			img.setTo(WHITE);
+
+			// draw goal
+			rectangle(img, getRectFromId(goalId), RED, CV_FILLED);
+
+			// draw robot
+			rectangle(img, getRectFromId(startId), GREEN, CV_FILLED);
+
 			// loop through actualAdjMatrix and color obstacles gray
+			for (int i = 0; i < actualAdjMatrix.size(); i++) {
+				int blockedCount = 0;
+				if (i+1 < actualAdjMatrix.size() && actualAdjMatrix[i][i+1] == INT_MAX)
+					blockedCount++;
+				if (i-1 <= 0 && actualAdjMatrix[i][i-1])
+					blockedCount++;
+				if (i+numCols < actualAdjMatrix.size() && actualAdjMatrix[i][i+numCols] == INT_MAX)
+					blockedCount++;
+				if (i-numCols >= 0 && actualAdjMatrix[i][i-numCols] == INT_MAX)
+					blockedCount++;							
+				if (blockedCount > 1)
+					rectangle(img, getRectFromId(i), GRAY, CV_FILLED);
+			}
+
 			// loop through currAdjMatrix and color obstacles black
+			for (int i = 0; i < currAdjMatrix.size(); i++) {
+				int blockedCount = 0;
+				if (i+1 < currAdjMatrix.size() && currAdjMatrix[i][i+1] == INT_MAX)
+					blockedCount++;
+				if (i-1 <= 0 && currAdjMatrix[i][i-1])
+					blockedCount++;
+				if (i+numCols < currAdjMatrix.size() && currAdjMatrix[i][i+numCols] == INT_MAX)
+					blockedCount++;
+				if (i-numCols >= 0 && currAdjMatrix[i][i-numCols] == INT_MAX)
+					blockedCount++;							
+				if (blockedCount > 1)
+					rectangle(img, getRectFromId(i), BLACK, CV_FILLED);
+			}
+
 			// draw hollow squares around robot to show FOV
+			for (auto succ : nodeMap[startId].succ) {
+				rectangle(img, getRectFromId(succ), RED);
+			}
+			
 			// draw active path with red line
-			// waitKey 1 second
 		}
 };
 
 int main() {
 	// sample test case without visualizer
-	vector<vector<int>> adjMatrix = {{0,1,-1,-1,-1},
-									 {1,0,1,1,-1},
-									 {-1,1,0,1,1},
-									 {-1,1,1,0,10},
-									 {-1,-1,1,10,0}};
-	vector<vector<int>> changedAdjMatrix = {{0,1,-1,-1,-1},
-											{1,0,INT_MAX,1,-1},
-											{-1,INT_MAX,0,INT_MAX,INT_MAX},
-									 		{-1,1,INT_MAX,0,10},
-									 		{-1,-1,INT_MAX,10,0}};
-	vector<vector<int>> heuris = 	{{0,1,2,2,3},
-									 {1,0,1,1,2},
-									 {2,1,0,1,1},
-									 {2,1,1,0,1},
-									 {3,2,1,1,0}};
-	unordered_map<int, pair<vector<int>, vector<int>>> adjlists;
-	for (int i = 0; i < 5; i ++) {
-		vector<int> pred;
-		vector<int> succ;
-		for (int j = 0; j < 5; j++) {
-			if (adjMatrix[i][j] >= 1) {
-				pred.push_back(j);
-				succ.push_back(j);
-			} 
-		}
-		adjlists[i] = make_pair(pred, succ);
-	}
-	int stid = 0;
-	int goalid = 4;
+	// vector<vector<int>> adjMatrix = {{0,1,-1,-1,-1},
+	// 								 {1,0,1,1,-1},
+	// 								 {-1,1,0,1,1},
+	// 								 {-1,1,1,0,10},
+	// 								 {-1,-1,1,10,0}};
+	// vector<vector<int>> changedAdjMatrix = {{0,1,-1,-1,-1},
+	// 										{1,0,INT_MAX,1,-1},
+	// 										{-1,INT_MAX,0,INT_MAX,INT_MAX},
+	// 								 		{-1,1,INT_MAX,0,10},
+	// 								 		{-1,-1,INT_MAX,10,0}};
+	// vector<vector<int>> heuris = 	{{0,1,2,2,3},
+	// 								 {1,0,1,1,2},
+	// 								 {2,1,0,1,1},
+	// 								 {2,1,1,0,1},
+	// 								 {3,2,1,1,0}};
+	// unordered_map<int, pair<vector<int>, vector<int>>> adjlists;
+	// for (int i = 0; i < 5; i ++) {
+	// 	vector<int> pred;
+	// 	vector<int> succ;
+	// 	for (int j = 0; j < 5; j++) {
+	// 		if (adjMatrix[i][j] >= 1) {
+	// 			pred.push_back(j);
+	// 			succ.push_back(j);
+	// 		} 
+	// 	}
+	// 	adjlists[i] = make_pair(pred, succ);
+	// }
+	// int stid = 0;
+	// int goalid = 4;
 
-	Graph graph(adjMatrix, changedAdjMatrix, adjlists, heuris, stid, goalid, false);
-	graph.main();
+	// Graph graph(adjMatrix, changedAdjMatrix, adjlists, heuris, stid, goalid, false);
+	// graph.main();
 
-	// sample test case with visualizer
+	// sample test case with visualizer (to use visualizer, you need to use gridToGraph)
 	vector<vector<bool>> grid = {{1,1,1,1,1},
 							 	{1,1,1,1,1},
 								{1,1,1,1,1},
@@ -233,10 +284,12 @@ int main() {
 										{1,1,0,1,1},
 										{1,1,0,1,1},
 										{1,1,0,1,1},
-										{1,1,1,1,1}};
+										{1,1,0,1,1}};
+
 
 	GridToGraph gridToGraph(grid, actualGrid);
 	auto data = gridToGraph.getData();
-	Graph graphVisualizer(get<0>(data),get<1>(data),get<2>(data),get<3>(data), 0, gridToGraph.id(4,4), true, grid.size());
+
+	Graph graphVisualizer(get<0>(data),get<1>(data),get<2>(data),get<3>(data), gridToGraph.id(2, 0), gridToGraph.id(2, 4), true, grid[0].size());
 	graphVisualizer.main();
 }

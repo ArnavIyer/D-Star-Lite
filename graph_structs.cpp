@@ -25,15 +25,15 @@ struct Key {
 	}
 
 	bool operator<(const Key& other) const {
-		return (first == other.first) ? second < other.second : first < other.first;
+		return (abs(first - other.first) < 0.005) ? second < other.second : first < other.first;
 	}
 
 	bool operator==(const Key& other) const {
-        return first == other.first && second == other.second;
+        return abs(first - other.first) < 0.005 && abs(second - other.second) < 0.005;
 	}
 
     bool operator!=(const Key& other) const {
-        return !(first == other.first && second == other.second);
+        return !(abs(first - other.first) < 0.005 && abs(second - other.second) < 0.005);
     }
 };
 
@@ -54,6 +54,10 @@ struct PQEntry {
 
 	bool operator!=(const PQEntry& other) const {
 		return !(key == other.key && id == other.id);
+	}
+
+	void print() const {
+		cout << "id:" << id << " key:" << "<" << key.first << "," << key.second << ">" << endl;
 	}
 };
 

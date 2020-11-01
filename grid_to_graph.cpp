@@ -5,6 +5,7 @@
 #include <queue>
 #include <unordered_map>
 #endif
+#include <cstdlib>
 
 using namespace std;
 
@@ -21,7 +22,7 @@ class GridToGraph {
         }
 
         int id(int i, int j) {
-            return i * grid.size() + j;
+            return i * grid[0].size() + j;
         }
 
         auto getData() {
@@ -40,9 +41,9 @@ class GridToGraph {
                 for (int j = 0; j < grid[0].size(); j++) {
                     int thisId = id(i,j);
                     for (int k = 0; k < 4; k++) {
-                        if (i+dx[k] >= 0 && i+dx[k] < grid.size() && j+dy[k] >= 0 && j+dy[k] < grid.size()) {
+                        if (i+dx[k] >= 0 && i+dx[k] < grid.size() && j+dy[k] >= 0 && j+dy[k] < grid[0].size()) {
                             int otherId = id(i+dx[k], j+dy[k]);
-                            if (grid[i+dx[k]][j+dy[k]]) {
+                            if (grid[i+dx[k]][j+dy[k]] && grid[i][j]) {
                                 adjMatrix[thisId][otherId] = 1;
                                 adjMatrix[thisId][otherId] = 1;
                                 if (adjLists.count(otherId) == 0) {
@@ -56,23 +57,15 @@ class GridToGraph {
                             }
                         }
                     }
-                    if (j > i) {
-                        for (int n = 0; n < grid.size(); n++) {
-                            for (int m = 0; m < grid[0].size(); m++) {
-                                heuristics[id(i,j)][id(n,m)] = hypot(i-n, j-m);
-                                heuristics[id(n,m)][id(i,j)] = hypot(i-n, j-m);
-                            }
-                        }
-                    }
                 }
             }
             for (int i = 0; i < grid.size(); i++) {
                 for (int j = 0; j < grid[0].size(); j++) {
                     int thisId = id(i,j);
                     for (int k = 0; k < 4; k++) {
-                        if (i+dx[k] >= 0 && i+dx[k] < grid.size() && j+dy[k] >= 0 && j+dy[k] < grid.size()) {
+                        if (i+dx[k] >= 0 && i+dx[k] < grid.size() && j+dy[k] >= 0 && j+dy[k] < grid[0].size()) {
                             int otherId = id(i+dx[k], j+dy[k]);
-                            if (actualGrid[i+dx[k]][j+dy[k]]) {
+                            if (actualGrid[i+dx[k]][j+dy[k]] && actualGrid[i][j]) {
                                 actualAdjMatrix[thisId][otherId] = 1;
                                 actualAdjMatrix[thisId][otherId] = 1;
                             } else {
@@ -81,6 +74,14 @@ class GridToGraph {
                             }
                         }
                     }
+                }
+            }
+            abs(0.5);
+            for (int i = 0; i < numNodes; i++) {
+                for (int j = 0; j < numNodes; j++) {
+                    int numCols = grid[0].size();
+                    heuristics[i][j] = std::abs(i / numCols - j / numCols) + std::abs(i % numCols - j % numCols);
+                    heuristics[j][i] = std::abs(i / numCols - j / numCols) + std::abs(i % numCols - j % numCols);
                 }
             }
             return make_tuple(adjMatrix, actualAdjMatrix, adjLists, heuristics);
