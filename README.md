@@ -1,7 +1,5 @@
 # D* Lite
 
-NOTE: Currently using the visualizer may not work, a bug has been found.
-
 This is an implementation of the D* Lite algorithm, described [here](idm-lab.org/bib/abstracts/papers/aaai02b.pdf).
 Currently only the version in Figure 3 is implemented, but the optimized version will be implemented shortly. Additionally, this implementation only searches for changed edge weights in successor nodes of the current "start" node.
 

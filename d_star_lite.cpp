@@ -31,11 +31,13 @@ class Graph {
 		Mat img;
 		bool useVisualizer;
 		int numCols;
+		vector<bool> isObstacle;
+		vector<bool> actualIsObstacle;
 
 		Graph() {}
 
-		Graph(vector<vector<int>> cam, vector<vector<int>> aam, unordered_map<int, pair<vector<int>, vector<int>>> al, vector<vector<int>> h, int startID, int goalID, bool uv, int nc = 0) {
-			currAdjMatrix = cam; // stores cost to travel to each node, -1 if impossible
+		Graph(vector<vector<int>> cam, vector<vector<int>> aam, unordered_map<int, pair<vector<int>, vector<int>>> al, vector<vector<int>> h, int startID, int goalID, bool uv, int nc = 0, vector<bool> isObstacle = vector<bool>(), vector<bool> actualIsObstacle = vector<bool>()) {
+			currAdjMatrix = cam; // stores cost to travel to each node
 			actualAdjMatrix = aam;
 			adjLists = al;
 			heuristic = h;
@@ -46,6 +48,8 @@ class Graph {
 			numCols = nc;
 			if (numCols > 0) {
 				img = Mat::zeros(PIXELS_PER_SQUARE*currAdjMatrix.size()/numCols, PIXELS_PER_SQUARE*numCols, CV_8UC3);
+				this->isObstacle = isObstacle;
+				this->actualIsObstacle = actualIsObstacle;
 			}
 			useVisualizer = uv;
 
@@ -56,6 +60,9 @@ class Graph {
 		}
 
 		Key calculateKey(GraphNode s) {
+			if (s.g == INT_MAX && s.rhs == INT_MAX) {
+				return Key(INT_MAX, INT_MAX);
+			}
 			Key key(min(s.g, s.rhs) + heuristic[startId][s.id] + km, min(s.g, s.rhs));
 			return key;
 		}
@@ -64,6 +71,9 @@ class Graph {
 		void updateVertex(int nodeId) {
 			if (nodeId != goalId) {
 				nodeMap[nodeId].rhs = calculateRHS(nodeId); 
+			}
+			if (pqMap.count(nodeId) == 1) {
+				pqMap.erase(nodeId);
 			}
 			if (nodeMap[nodeId].g != nodeMap[nodeId].rhs) {
 				pqMap[nodeId] = PQEntry(calculateKey(nodeMap[nodeId]), nodeId);
@@ -74,7 +84,7 @@ class Graph {
 		void computeShortestPath() {
 			while(pq.top().key < calculateKey(nodeMap[startId]) || nodeMap[startId].rhs != nodeMap[startId].g)  {
 				// continue if the top of the priority queue is either not in pqMap or not equal to what is in pqMap
-				while (pqMap.count(pq.top().id) == 0 || pq.top() != pqMap[pq.top().id]) {
+				while (pq.size() > 0 && (pqMap.count(pq.top().id) == 0 || pq.top() != pqMap[pq.top().id])) {
 					pq.pop();
 				}
 				PQEntry pqTop = pq.top();
@@ -104,7 +114,7 @@ class Graph {
 					}
 					updateVertex(pqTop.id);
 				}
-				while (pqMap.count(pq.top().id) == 0 || pq.top() != pqMap[pq.top().id]) {
+				while (pq.size() > 0 && (pqMap.count(pq.top().id) == 0 || pq.top() != pqMap[pq.top().id])) {
 					pq.pop();
 				}
 			}
@@ -140,16 +150,24 @@ class Graph {
 				startId = newStartId;
 				vector<pair<int,int>> changedEdges;				// assuming robot can only see successors of itself
 				for (auto succId : nodeMap[startId].succ) {
+					if (nodeMap.count(succId) == 0) {
+						nodeMap[succId] = GraphNode(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
+					}
 					if (currAdjMatrix[startId][succId] != actualAdjMatrix[startId][succId]) {
-						if (nodeMap.count(succId) == 0) {
-							nodeMap[succId] = GraphNode(succId, INT_MAX, INT_MAX, adjLists[succId].first, adjLists[succId].second);
-						}
-						changedEdges.push_back(make_pair(startId,succId));
+						changedEdges.push_back(make_pair(startId, succId));
+					}
+					if (currAdjMatrix[startId][succId] != actualAdjMatrix[startId][succId]) {
+						changedEdges.push_back(make_pair(succId, startId));
 					}
 				}
 				if (changedEdges.size() != 0) {
 					km += heuristic[lastStartId][startId];
 					lastStartId = startId;
+					if (useVisualizer) {
+						for (auto edge : changedEdges) {
+							isObstacle[edge.second] = actualIsObstacle[edge.second];
+						}
+					}
 					for (auto edge : changedEdges) {
 						currAdjMatrix[edge.first][edge.second] = actualAdjMatrix[edge.first][edge.second];
 						updateVertex(edge.first);
@@ -198,34 +216,14 @@ class Graph {
 
 			// draw robot
 			rectangle(img, getRectFromId(startId), GREEN, CV_FILLED);
-
 			// loop through actualAdjMatrix and color obstacles gray
 			for (int i = 0; i < actualAdjMatrix.size(); i++) {
-				int blockedCount = 0;
-				if (i+1 < actualAdjMatrix.size() && actualAdjMatrix[i][i+1] == INT_MAX)
-					blockedCount++;
-				if (i-1 <= 0 && actualAdjMatrix[i][i-1])
-					blockedCount++;
-				if (i+numCols < actualAdjMatrix.size() && actualAdjMatrix[i][i+numCols] == INT_MAX)
-					blockedCount++;
-				if (i-numCols >= 0 && actualAdjMatrix[i][i-numCols] == INT_MAX)
-					blockedCount++;							
-				if (blockedCount > 1)
+				if (actualIsObstacle[i])
 					rectangle(img, getRectFromId(i), GRAY, CV_FILLED);
 			}
-
 			// loop through currAdjMatrix and color obstacles black
 			for (int i = 0; i < currAdjMatrix.size(); i++) {
-				int blockedCount = 0;
-				if (i+1 < currAdjMatrix.size() && currAdjMatrix[i][i+1] == INT_MAX)
-					blockedCount++;
-				if (i-1 <= 0 && currAdjMatrix[i][i-1])
-					blockedCount++;
-				if (i+numCols < currAdjMatrix.size() && currAdjMatrix[i][i+numCols] == INT_MAX)
-					blockedCount++;
-				if (i-numCols >= 0 && currAdjMatrix[i][i-numCols] == INT_MAX)
-					blockedCount++;							
-				if (blockedCount > 1)
+				if (isObstacle[i])
 					rectangle(img, getRectFromId(i), BLACK, CV_FILLED);
 			}
 
@@ -233,63 +231,61 @@ class Graph {
 			for (auto succ : nodeMap[startId].succ) {
 				rectangle(img, getRectFromId(succ), RED);
 			}
-			
-			// draw active path with red line
 		}
 };
 
 int main() {
-	// sample test case without visualizer
-	// vector<vector<int>> adjMatrix = {{0,1,-1,-1,-1},
-	// 								 {1,0,1,1,-1},
-	// 								 {-1,1,0,1,1},
-	// 								 {-1,1,1,0,10},
-	// 								 {-1,-1,1,10,0}};
-	// vector<vector<int>> changedAdjMatrix = {{0,1,-1,-1,-1},
-	// 										{1,0,INT_MAX,1,-1},
-	// 										{-1,INT_MAX,0,INT_MAX,INT_MAX},
-	// 								 		{-1,1,INT_MAX,0,10},
-	// 								 		{-1,-1,INT_MAX,10,0}};
-	// vector<vector<int>> heuris = 	{{0,1,2,2,3},
-	// 								 {1,0,1,1,2},
-	// 								 {2,1,0,1,1},
-	// 								 {2,1,1,0,1},
-	// 								 {3,2,1,1,0}};
-	// unordered_map<int, pair<vector<int>, vector<int>>> adjlists;
-	// for (int i = 0; i < 5; i ++) {
-	// 	vector<int> pred;
-	// 	vector<int> succ;
-	// 	for (int j = 0; j < 5; j++) {
-	// 		if (adjMatrix[i][j] >= 1) {
-	// 			pred.push_back(j);
-	// 			succ.push_back(j);
-	// 		} 
-	// 	}
-	// 	adjlists[i] = make_pair(pred, succ);
-	// }
-	// int stid = 0;
-	// int goalid = 4;
-
-	// Graph graph(adjMatrix, changedAdjMatrix, adjlists, heuris, stid, goalid, false);
-	// graph.main();
-
 	// sample test case with visualizer (to use visualizer, you need to use gridToGraph)
 	vector<vector<bool>> grid = {{1,1,1,1,1},
-							 	{1,1,1,1,1},
-								{1,1,1,1,1},
-							 	{1,1,1,1,1},
+							 	{1,1,0,1,1},
+								{1,1,0,1,1},
+							 	{1,1,0,1,1},
 								{1,1,1,1,1}};
 
-	vector<vector<bool>> actualGrid = {{1,1,1,1,1},
+	vector<vector<bool>> actualGrid = { {1,1,1,1,1},
 										{1,1,0,1,1},
 										{1,1,0,1,1},
-										{1,1,0,1,1},
-										{1,1,0,1,1}};
+										{1,1,0,0,0},
+										{1,1,1,1,1}};
 
 
 	GridToGraph gridToGraph(grid, actualGrid);
 	auto data = gridToGraph.getData();
 
-	Graph graphVisualizer(get<0>(data),get<1>(data),get<2>(data),get<3>(data), gridToGraph.id(2, 0), gridToGraph.id(2, 4), true, grid[0].size());
+	Graph graphVisualizer(get<0>(data),get<1>(data),get<2>(data),get<3>(data), gridToGraph.id(2, 0), gridToGraph.id(2, 4), true, grid[0].size(), get<4>(data), get<5>(data));
 	graphVisualizer.main();
+
+	// sample test case without visualizer (you cannot use grid to graph)
+	vector<vector<int>> adjMatrix = {{0,1,-1,-1,-1},
+									 {1,0,1,1,-1},
+									 {-1,1,0,1,1},
+									 {-1,1,1,0,10},
+									 {-1,-1,1,10,0}};
+	vector<vector<int>> changedAdjMatrix = {{0,1,-1,-1,-1},
+											{1,0,INT_MAX,1,-1},
+											{-1,INT_MAX,0,INT_MAX,INT_MAX},
+									 		{-1,1,INT_MAX,0,10},
+									 		{-1,-1,INT_MAX,10,0}};
+	vector<vector<int>> heuris = 	{{0,1,2,2,3},
+									 {1,0,1,1,2},
+									 {2,1,0,1,1},
+									 {2,1,1,0,1},
+									 {3,2,1,1,0}};
+	unordered_map<int, pair<vector<int>, vector<int>>> adjlists;
+	for (int i = 0; i < 5; i ++) {
+		vector<int> pred;
+		vector<int> succ;
+		for (int j = 0; j < 5; j++) {
+			if (adjMatrix[i][j] >= 1) {
+				pred.push_back(j);
+				succ.push_back(j);
+			} 
+		}
+		adjlists[i] = make_pair(pred, succ);
+	}
+	int stid = 0;
+	int goalid = 4;
+
+	Graph graph(adjMatrix, changedAdjMatrix, adjlists, heuris, stid, goalid, false);
+	graph.main();
 }
