@@ -304,15 +304,12 @@ class Graph {
                     rectangle(img, getRectFromId(i), BLACK, FILLED);
             }
 
-            // draw hollow squares around robot to show FOV
-//            for (auto succ : nodeMap[startId].succ) {
-//                rectangle(img, getRectFromId(succ), RED);
-//            }
-
+            // all nodes expanded (removed from priority queue) in the previous iteration - red outline
             for (auto updated : propogatedTo) {
                 rectangle(img, getRectFromId(updated), RED);
             }
 
+            // locally inconsistent - blue outline
             for (const auto& kv : nodeMap) {
                 if (kv.second.g != kv.second.rhs) {
                     rectangle(img, getRectFromId(kv.first), Scalar(255,0,0));
